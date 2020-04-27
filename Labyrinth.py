@@ -10,7 +10,7 @@ class Gui:
         self.window = root
         self.window.title("Generic Algorithm with Labyrinth")
         self.canvas_size = 700  # canvas
-        self.canvas = tk.Canvas(root, width=self.canvas_size, height=self.canvas_size, background="orange")
+        self.canvas = tk.Canvas(root, width=self.canvas_size, height=self.canvas_size, background="hot pink")
         self.canvas.grid(column=1, row=0)
         self.frame = tk.Frame(self.window)
         self.frame.grid(row=0, column=0, sticky="n")
@@ -20,8 +20,13 @@ class Gui:
         self.buffer = 0
         self.k = 0
         self.obstacle_count = 0
+        self.obstacle_color = "hot pink"
+        self.grid_color = "light pink"
+        self.start_color = "white"
+        self.outline_color = "brown"
+
         size20 = tk.Radiobutton(self.frame, text='20x20', variable=self.size, value=20).grid(column=0, row=0)
-        size100 = tk.Radiobutton(self.frame, text='50x50', variable=self.size, value=100).grid(column=1, row=0)
+        size100 = tk.Radiobutton(self.frame, text='100x100', variable=self.size, value=100).grid(column=1, row=0)
         frame_ran = tk.Radiobutton(self.frame, text='Rastgele', variable=self.input_type, value="Random",
                                    command=self.obstacle_random).grid(column=0, row=1)
         frame_us = tk.Radiobutton(self.frame, text='Kullanıcı Girişi', variable=self.input_type, value="User",
@@ -49,6 +54,7 @@ class Gui:
             self.k = 100
         self.canvas.delete("all")
         self.text.delete('1.0', tk.END)
+        self.generation_label.config(text="0")
         self.buffer = (self.canvas_size - self.size.get()) / self.size.get()
 
         for j in range(0, self.size.get()):
@@ -56,15 +62,17 @@ class Gui:
 
                 if i == 0 or i == self.size.get() - 1 or j == 0 or j == self.size.get() - 1:
                     self.canvas.create_rectangle(i * self.buffer + i, j * self.buffer + j, (i + 1) * self.buffer + i,
-                                                 (j + 1) * self.buffer + j, fill="green", outline="brown")
+                                                 (j + 1) * self.buffer + j, fill=self.obstacle_color,
+                                                 outline=self.outline_color)
                 else:
                     self.canvas.create_rectangle(i * self.buffer + i, j * self.buffer + j, (i + 1) * self.buffer + i,
-                                                 (j + 1) * self.buffer + j, fill="orange", outline="orange red")
+                                                 (j + 1) * self.buffer + j, fill=self.grid_color,
+                                                 outline=self.outline_color)
         rect = self.canvas.find_closest(self.buffer + 2, self.buffer + 2)
-        self.canvas.itemconfigure(rect, fill="light pink")
+        self.canvas.itemconfigure(rect, fill=self.start_color)
         rect = self.canvas.find_closest(self.buffer * (self.size.get() - 1) + self.size.get() - 3,
                                         self.buffer * (self.size.get() - 1) + self.size.get() - 3)
-        self.canvas.itemconfigure(rect, fill="hot pink")
+        self.canvas.itemconfigure(rect, fill=self.start_color)
 
     def check_obstacle(self, x_dir, y_dir, x_pos, y_pos):
         x = x_pos
@@ -75,14 +83,14 @@ class Gui:
         rect3 = self.canvas.find_closest(x + x_dir * self.buffer * 2, y + y_dir * self.buffer * 2)
         rect4 = self.canvas.find_closest(x + x_dir * self.buffer * 3, y + y_dir * self.buffer * 3)
 
-        if (self.canvas.itemcget(rect1, 'fill') == "orange" and self.canvas.itemcget(rect2, 'fill') == "orange"
-                and self.canvas.itemcget(rect3, 'fill') == "orange" and self.canvas.itemcget(rect4, 'fill')
-                == "orange"):
+        if (self.canvas.itemcget(rect1, 'fill') == self.grid_color and self.canvas.itemcget(rect2, 'fill')
+                == self.grid_color and self.canvas.itemcget(rect3, 'fill') == self.grid_color and
+                self.canvas.itemcget(rect4, 'fill') == self.grid_color):
             if rect1 != rect2 and rect2 != rect3 and rect3 != rect4:
-                self.canvas.itemconfigure(rect1, fill="green", outline="brown")
-                self.canvas.itemconfigure(rect2, fill="green", outline="brown")
-                self.canvas.itemconfigure(rect3, fill="green", outline="brown")
-                self.canvas.itemconfigure(rect4, fill="green", outline="brown")
+                self.canvas.itemconfigure(rect1, fill=self.obstacle_color, outline=self.outline_color)
+                self.canvas.itemconfigure(rect2, fill=self.obstacle_color, outline=self.outline_color)
+                self.canvas.itemconfigure(rect3, fill=self.obstacle_color, outline=self.outline_color)
+                self.canvas.itemconfigure(rect4, fill=self.obstacle_color, outline=self.outline_color)
                 return 1
             elif self.input_type == "User":
                 msg.showwarning(title="Uyarı", message="Engel koymak istediğiniz kutuların sınır bölgelerine değil, "
@@ -118,6 +126,8 @@ class Population:
         self.total_fitness = 0
         self.population = []
         self.distributions = []
+        self.sorted_list = []
+        self.max_path = -1
 
 
 class Chromosome:
@@ -148,7 +158,7 @@ def is_there_an_obstacle(x, y, move_x, move_y):
     y += move_y
     rectangle = gui.canvas.find_overlapping(x * gui.buffer + x, y * gui.buffer + y,
                                             (x + 1) * gui.buffer + x, (y + 1) * gui.buffer + y)
-    if gui.canvas.itemcget(rectangle, 'fill') == "green":  # obstacle
+    if gui.canvas.itemcget(rectangle, 'fill') == gui.obstacle_color:  # obstacle
         return True, None
     else:
         return False, rectangle
@@ -159,38 +169,38 @@ def manhattan_distance(x, y, x_in, y_in):
 
 
 def calculate_fitness(population):
-
     total_fitness = 0
     for j in range(population.pop_size):
         x = 1
         y = 1
         chromosome = population.population[j]
         i = 0
-        for i in range(chromosome.chr_size):
+        obstacle = False
+        while i < chromosome.chr_size and not obstacle:
             direction = chromosome.chromosome[i]
-            # print(direction)
             move_x, move_y = direction_finder(direction)
             obstacle, rectangle = is_there_an_obstacle(x, y, move_x, move_y)
-
             if obstacle:
-                chromosome.collide += 1
-                if chromosome.first_collide == -1:
-                    chromosome.first_collide = manhattan_distance(x, y, 1, 1)
+                chromosome.first_collide = manhattan_distance(x, y, 1, 1)
             else:
                 x += move_x
                 y += move_y
                 chromosome.path.append(rectangle)
+            i += 1
         chromosome.traveled = manhattan_distance(x, y, 1, 1)  # şu ana kadar gittiği yol
         chromosome.distance = manhattan_distance(x, y, gui.size.get() - 2, gui.size.get() - 2)  # tahmini kalan yol
         if chromosome.distance == 0:
             chromosome.fitness = 1
         else:
-            chromosome.fitness = 0.1 * (1 - chromosome.traveled / (gui.size.get() * 2)) \
-                               + 0.9 * (1 - chromosome.distance / (gui.size.get() * 2)) \
-                               + 0.0 * (1 - chromosome.collide / chromosome.chr_size) \
-                               + 0.0 * (chromosome.first_collide / (gui.size.get() * 2))
+            chromosome.fitness = 1 / chromosome.distance  # fitness a
+            '''chromosome.fitness = 0.7 * (1 - chromosome.distance / (gui.size.get() * 2)) + \
+                                 0.3 * (chromosome.traveled / (gui.size.get() * 2))'''  # fitness b
+            if chromosome.first_collide != -1:
+                chromosome.fitness *= 0.1
 
         total_fitness += chromosome.fitness
+        if chromosome.traveled > population.max_path:
+            population.max_path = chromosome.traveled
     population.total_fitness = total_fitness
 
     for i in range(population.pop_size):
@@ -203,6 +213,15 @@ def roulette_wheel_selection(population):
         chromosomes.append(i)
     index = choice(chromosomes, p=population.distributions)
     return population.population[index]
+
+
+def random_selection(population):
+    sorted_list = []
+    # print("Len population", len(population.population))
+    sorted_list = sorted(population.population, key=lambda chromosome: chromosome.fitness, reverse=True)
+    # print("Len sorted % 10", int(len(sorted_list) / 10))
+    selection = random.randint(0, int(len(sorted_list) / 10))
+    return sorted_list[selection]
 
 
 def uniform_crossover(parent1, parent2):
@@ -234,25 +253,30 @@ def mutate(child):
 
 
 def find_best(population):
-    max = 0
+    maximum = -1
     max_index = 0
+
     for i in range(population.pop_size):
-        if population.population[i].fitness > max:
-            max = population.population[i].fitness
+        if population.population[i].fitness > maximum:
+            maximum = population.population[i].fitness
             max_index = i
+
     return population.population[max_index]
 
 
 def genetic_algorithm(population, start):
     generation_number = 0
     populations = []
+    max_path = -1
     best_child = Chromosome(population.chr_size)
     best_child.distance = 99
 
-    while generation_number < 10 and best_child.distance > 0:
+    while generation_number < 200 and best_child.distance > 0:  # generation_number < 200 time.time() - start < 900
         print(generation_number)
         calculate_fitness(population)
-        new_population = Population(20, 20)
+        if population.max_path > max_path:
+            max_path = population.max_path
+        new_population = Population(population.pop_size, population.chr_size)
         for i in range(population.pop_size):
             x = roulette_wheel_selection(population)
             y = roulette_wheel_selection(population)
@@ -265,45 +289,61 @@ def genetic_algorithm(population, start):
         population = new_population
         generation_number += 1
 
-    return populations
+    if best_child.distance == 0:
+        return populations, max_path, generation_number, True
+    else:
+        return populations, max_path, generation_number, False
 
 
 def visualize_populations(populations):
-    index = len(populations) - 1
-    path_size = len(populations[index].path)
-
-    for j in range(path_size - 1):
-        rectangle = populations[index].path[j]
-        gui.canvas.itemconfigure(rectangle, fill="red")
-    rectangle = populations[index].path[path_size - 1]
-    gui.canvas.itemconfigure(rectangle, fill="blue")
-
-    message = "Path Size: {}\nNumber of Collides: {}\nFirst Collide: {}\nDistance: {}".\
-        format(path_size, populations[index].collide, populations[index].first_collide, populations[index].distance)
-    generation_number = "{}".format(index)
-    gui.text.insert(tk.END, message)
-    gui.generation_label.config(text=generation_number)
-    print("Path Size: ", path_size)
-    print("Number of collides: ", populations[index].collide)
-    print("First collide: ", populations[index].first_collide)
-    print("Distance: ", populations[index].distance)
+    j = 0
+    print(len(populations))
+    for i in range(len(populations)):
+        # print(populations[i].path)
+        for j in range(len(populations[i].path)):
+            rectangle = populations[i].path[j]
+            gui.canvas.itemconfigure(rectangle, fill="purple")
+        generation_number = "{}".format(i)
+        gui.generation_label.config(text=generation_number)
+        gui.window.update()
+        time.sleep(0.5)
+        if i != len(populations) - 1:
+            for j in range(len(populations[i].path)):
+                rectangle = populations[i].path[j]
+                gui.canvas.itemconfigure(rectangle, fill=gui.grid_color)
+            rect = gui.canvas.find_closest(gui.buffer + 2, gui.buffer + 2)
+            gui.canvas.itemconfigure(rect, fill=gui.start_color)
+        else:
+            return
+    # son jenerasyonun en iyi bireyini çizdirmek için:
+    '''i = len(populations) - 1
+    for j in range(len(populations[i].path)):
+        rectangle = populations[i].path[j]
+        gui.canvas.itemconfigure(rectangle, fill="purple")
+    generation_number = "{}".format(i)
+    gui.generation_label.config(text=generation_number)'''
 
 
 def create_population():
+    found = False
+
     start = time.time()
-    pop = Population(gui.size.get()*gui.size.get(), int((gui.size.get()*gui.size.get()/4)))
+    pop = Population(int(gui.size.get()**2 / 4), int((gui.size.get()**2)/4))  # (gui.size.get()*gui.size.get()/4))
+    print("Population is creating. . .")
     for i in range(pop.pop_size):
+        # print(i)
         chromosome = Chromosome(pop.chr_size)
         for j in range(chromosome.chr_size):
             chromosome.chromosome.append(random.randint(1, 4))
         pop.population.append(chromosome)
-    populations = genetic_algorithm(pop, start)
-    visualize_populations(populations)
+        # print(chromosome.chromosome)
+    pops, max_path, generation_number, found = genetic_algorithm(pop, start)
+    print("Maksimum Yol Uzunluğu: {}, Jenerasyon Sayısı: {}, Labirent Çözüldü: {}".format(max_path, generation_number, found))
+    visualize_populations(pops)
 
 
 if __name__ == "__main__":
     root = tk.Tk()
     gui = Gui()
     root.mainloop()
-
 
